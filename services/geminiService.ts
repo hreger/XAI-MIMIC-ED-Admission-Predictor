@@ -1,10 +1,17 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
 import type { PatientData, PredictionResponse } from '../types';
+import { getValidatedConfig } from '../config/api';
+import { withRetry, RateLimiter, ApiError } from '../utils/apiUtils';
 
-// FIX: Correctly initialize the GoogleGenAI client using the API key from environment variables.
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const config = getValidatedConfig();
+const ai = new GoogleGenAI({ apiKey: config.GEMINI_API_KEY });
 
+// Initialize rate limiter
+const rateLimiter = new RateLimiter(
+    60000, // 1 minute window
+    config.RATE_LIMIT_PER_MINUTE
+);
 
 const responseSchema = {
     type: Type.OBJECT,
@@ -18,7 +25,7 @@ const responseSchema = {
                 type: Type.OBJECT,
                 properties: {
                     feature: { type: Type.STRING },
-                    value: { type: Type.STRING }, // Use string to accommodate all values
+                    value: { type: Type.STRING },
                     importance: { type: Type.NUMBER, description: "SHAP value, can be positive or negative." },
                 },
                 required: ["feature", "value", "importance"],
@@ -41,131 +48,89 @@ const responseSchema = {
                 Gender: {
                     type: Type.OBJECT,
                     properties: {
-                        Male: {
-                             type: Type.OBJECT, properties: {
-                                accuracy: { type: Type.NUMBER },
-                                precision: { type: Type.NUMBER },
-                                recall: { type: Type.NUMBER },
-                                f1_score: { type: Type.NUMBER },
-                             }
-                        },
-                        Female: {
-                             type: Type.OBJECT, properties: {
-                                accuracy: { type: Type.NUMBER },
-                                precision: { type: Type.NUMBER },
-                                recall: { type: Type.NUMBER },
-                                f1_score: { type: Type.NUMBER },
-                             }
-                        },
+                        Male: { type: Type.OBJECT, properties: {
+                            accuracy: { type: Type.NUMBER },
+                            precision: { type: Type.NUMBER },
+                            recall: { type: Type.NUMBER },
+                            f1_score: { type: Type.NUMBER },
+                        }},
+                        Female: { type: Type.OBJECT, properties: {
+                            accuracy: { type: Type.NUMBER },
+                            precision: { type: Type.NUMBER },
+                            recall: { type: Type.NUMBER },
+                            f1_score: { type: Type.NUMBER },
+                        }},
                     },
                 },
                 Race: {
                     type: Type.OBJECT,
                     properties: {
-                        White: {
-                            type: Type.OBJECT, properties: {
-                                accuracy: { type: Type.NUMBER },
-                                precision: { type: Type.NUMBER },
-                                recall: { type: Type.NUMBER },
-                                f1_score: { type: Type.NUMBER },
-                            }
-                        },
-                        Black: {
-                            type: Type.OBJECT, properties: {
-                                accuracy: { type: Type.NUMBER },
-                                precision: { type: Type.NUMBER },
-                                recall: { type: Type.NUMBER },
-                                f1_score: { type: Type.NUMBER },
-                            }
-                        },
-                        Asian: {
-                           type: Type.OBJECT, properties: {
-                                accuracy: { type: Type.NUMBER },
-                                precision: { type: Type.NUMBER },
-                                recall: { type: Type.NUMBER },
-                                f1_score: { type: Type.NUMBER },
-                            }
-                        },
-                        Hispanic: {
-                            type: Type.OBJECT, properties: {
-                                accuracy: { type: Type.NUMBER },
-                                precision: { type: Type.NUMBER },
-                                recall: { type: Type.NUMBER },
-                                f1_score: { type: Type.NUMBER },
-                            }
-                        },
+                        White: { type: Type.OBJECT, properties: {
+                            accuracy: { type: Type.NUMBER },
+                            precision: { type: Type.NUMBER },
+                            recall: { type: Type.NUMBER },
+                            f1_score: { type: Type.NUMBER },
+                        }},
+                        Black: { type: Type.OBJECT, properties: {
+                            accuracy: { type: Type.NUMBER },
+                            precision: { type: Type.NUMBER },
+                            recall: { type: Type.NUMBER },
+                            f1_score: { type: Type.NUMBER },
+                        }},
+                        Asian: { type: Type.OBJECT, properties: {
+                            accuracy: { type: Type.NUMBER },
+                            precision: { type: Type.NUMBER },
+                            recall: { type: Type.NUMBER },
+                            f1_score: { type: Type.NUMBER },
+                        }},
+                        Hispanic: { type: Type.OBJECT, properties: {
+                            accuracy: { type: Type.NUMBER },
+                            precision: { type: Type.NUMBER },
+                            recall: { type: Type.NUMBER },
+                            f1_score: { type: Type.NUMBER },
+                        }},
                     },
                 },
             },
         },
     },
-    required: [
-        "admissionProbability",
-        "prediction",
-        "triageNote",
-        "structuredFeatureImportance",
-        "textFeatureImportance",
-        "fairnessMetrics",
-    ],
+    required: ["admissionProbability", "prediction", "triageNote", "structuredFeatureImportance", "textFeatureImportance", "fairnessMetrics"],
 };
 
-
-export const getEDPrediction = async (patientData: PatientData): Promise<PredictionResponse> => {
-
-    const systemInstruction = `You are a sophisticated, multimodal, explainable AI model (ClinicalBERT + XGBoost) designed to predict Emergency Department (ED) admission based on MIMIC-IV data.
-    Your task is to analyze the provided structured data and unstructured triage note to make a prediction.
-    You MUST provide explanations for your prediction in the form of SHAP values for structured features and LIME-style word importances for the text.
-    You MUST also provide simulated fairness audit metrics for different demographic groups.
-    The output MUST be a valid JSON object that strictly adheres to the provided schema. Do not include any markdown formatting like \`\`\`json.`;
-
-    const prompt = `
-    Analyze the following patient data and predict the likelihood of ED admission.
-
-    **Structured Data:**
-    - Age: ${patientData.age}
-    - Gender: ${patientData.gender}
-    - Race: ${patientData.race}
-    - Heart Rate: ${patientData.heartRate} bpm
-    - Respiratory Rate: ${patientData.respiratoryRate} breaths/min
-    - Systolic BP: ${patientData.systolicBP} mmHg
-    - Diastolic BP: ${patientData.diastolicBP} mmHg
-    - O2 Saturation: ${patientData.oxygenSaturation}%
-    - Temperature: ${patientData.temperature}°C
-
-    **Unstructured Triage Note:**
-    "${patientData.triageNote}"
-
-    Based on this information, generate a complete JSON response including:
-    1.  'admissionProbability': A float between 0 and 1.
-    2.  'prediction': 'Admit' or 'Discharge'.
-    3.  'triageNote': The original triage note.
-    4.  'structuredFeatureImportance': An array of objects with SHAP values. High absolute values are more important. Positive values push towards admission, negative towards discharge.
-    5.  'textFeatureImportance': An array of objects with LIME values for key words in the triage note. Positive values push towards admission, negative towards discharge.
-    6.  'fairnessMetrics': A nested object with simulated fairness metrics (accuracy, precision, recall, f1_score) for Gender and Race subgroups.
-    `;
-
+export async function predictAdmission(patientData: PatientData): Promise<PredictionResponse> {
     try {
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: [{ parts: [{ text: prompt }] }],
-            config: {
-                systemInstruction: systemInstruction,
-                responseMimeType: 'application/json',
-                responseSchema: responseSchema,
-                temperature: 0.5,
-            },
+        await rateLimiter.waitForAvailability();
+
+        return await withRetry(async () => {
+            const model = ai.getGenerativeModel({ model: "gemini-pro" });
+
+            const prompt = `Analyze the following patient data and predict admission likelihood:\n${JSON.stringify(patientData, null, 2)}`;
+
+            const result = await model.generateContent({
+                contents: [{ role: 'user', parts: [{ text: prompt }] }],
+                generationConfig: {
+                    temperature: 0.1,
+                    topP: 0.8,
+                    topK: 40,
+                },
+            });
+
+            const response = result.response;
+            if (!response.candidates || response.candidates.length === 0) {
+                throw new ApiError(500, 'No response generated from the model');
+            }
+
+            const prediction = JSON.parse(response.candidates[0].content.parts[0].text);
+            return prediction as PredictionResponse;
         });
-
-        const jsonText = response.text.trim();
-        const parsedData = JSON.parse(jsonText) as PredictionResponse;
-        
-        // Gemini might not return the note, so we ensure it's there.
-        parsedData.triageNote = patientData.triageNote;
-        
-        return parsedData;
-
     } catch (error) {
-        console.error("Error calling Gemini API:", error);
-        throw new Error("Failed to get prediction from the AI model. The model may be overloaded or the input is invalid.");
+        if (error instanceof ApiError) {
+            throw error;
+        }
+        throw new ApiError(
+            500,
+            'Failed to generate prediction',
+            error
+        );
     }
-};
+}
