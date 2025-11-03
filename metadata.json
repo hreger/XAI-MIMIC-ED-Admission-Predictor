@@ -1,0 +1,5 @@
+{
+  "name": "XAI-MIMIC ED Admission Predictor",
+  "description": "A multimodal explainable AI framework for predicting emergency department admissions using simulated MIMIC-IV data, featuring integrated SHAP/LIME explanations and fairness audits powered by the Gemini API.",
+  "requestFramePermissions": []
+}
