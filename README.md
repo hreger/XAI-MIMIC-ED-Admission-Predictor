@@ -1,40 +1,20 @@
-# ED Risk Assessment System
+<div align="center">
+<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+</div>
 
-An advanced emergency department admission prediction system that helps healthcare professionals make informed decisions through machine learning and explainable AI.
+# Run and deploy your AI Studio app
 
-## Features
+This contains everything you need to run your app locally.
 
-- Comprehensive patient assessment through vital signs and demographic data
-- Natural language processing of triage notes
-- Transparent decision-making with SHAP and LIME explanations
-- Built-in fairness monitoring for equitable predictions
+View your app in AI Studio: https://ai.studio/apps/drive/1cS26TkOr4cYsheC_R0j44-0QCvNnfDWB
 
-## Technology Stack
+## Run Locally
 
-- React with TypeScript
-- Vite for build tooling
-- Google's Gemini API for advanced NLP
-- Recharts for data visualization
+**Prerequisites:**  Node.js
 
-## Getting Started
 
-### Prerequisites
-
-- Node.js (LTS version recommended)
-- A Gemini API key
-
-### Installation
-
-1. Clone the repository
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-3. Create a `.env.local` file and add your Gemini API key:
-   ```env
-   GEMINI_API_KEY=your_api_key_here
-   ```
-4. Start the development server:
-   ```bash
-   npm run dev
-   ```
+1. Install dependencies:
+   `npm install`
+2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
+3. Run the app:
+   `npm run dev`

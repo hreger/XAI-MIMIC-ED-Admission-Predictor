@@ -1,8 +1,10 @@
+// FIX: Removed self-referential import that was causing name conflicts with local declarations.
+// The file was attempting to import types defined within this same file.
 
 export interface PatientData {
     age: number;
-    gender: 'Male' | 'Female' | 'Other';
-    race: 'White' | 'Black' | 'Asian' | 'Hispanic' | 'Other';
+    gender: 'Male' | 'Female' | 'Other' | '';
+    race: 'White' | 'Black' | 'Asian' | 'Hispanic' | 'Other' | '';
     heartRate: number;
     respiratoryRate: number;
     systolicBP: number;
@@ -14,13 +16,13 @@ export interface PatientData {
 
 export interface StructuredFeatureImportance {
     feature: string;
-    value: number | string;
-    importance: number; // SHAP value
+    importance: number;
+    value: string | number;
 }
 
 export interface TextFeatureImportance {
     word: string;
-    importance: number; // LIME value
+    importance: number;
 }
 
 export interface FairnessMetric {
@@ -31,16 +33,40 @@ export interface FairnessMetric {
 }
 
 export interface FairnessMetrics {
-    [group: string]: {
-        [subgroup: string]: FairnessMetric;
-    };
+    Gender: Record<string, FairnessMetric>;
+    Race: Record<string, FairnessMetric>;
 }
 
-export interface PredictionResponse {
+export interface Counterfactual {
+    feature: keyof PatientData;
+    originalValue: string | number;
+    suggestedValue: string | number;
+    narrative: string;
+}
+
+export interface PredictionResult {
     admissionProbability: number;
     prediction: 'Admit' | 'Discharge';
-    triageNote: string;
-    structuredFeatureImportance: StructuredFeatureImportance[];
-    textFeatureImportance: TextFeatureImportance[];
-    fairnessMetrics: FairnessMetrics;
+    estimatedTimeToAdmission: string;
+    suggestedWard: string;
+    structuredExplanation: StructuredFeatureImportance[];
+    textExplanation: TextFeatureImportance[];
+    fairnessAudit: FairnessMetrics;
+    counterfactuals: Counterfactual[];
+}
+
+export interface Bed {
+    id: string;
+    ward: string;
+    room: number;
+    bedNumber: number;
+    status: 'Available' | 'Taken' | 'Cleaning';
+}
+
+export interface AdmissionTokenData {
+    patientData: PatientData;
+    predictionResult: PredictionResult;
+    allocatedBed: Bed;
+    patientId: string;
+    admissionDate: string;
 }
